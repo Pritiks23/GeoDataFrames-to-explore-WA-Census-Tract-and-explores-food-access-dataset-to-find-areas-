@@ -1,0 +1,184 @@
+''' Pritika Vipin,  This program
+works with GeoDataFrames to explore WA Census Tract
+and explores food access dataset to find areas
+with low income and low access to
+grocery stores '''
+import geopandas as gpd
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+def load_in_data(shp_file_name: str, csv_file_name: str) -> gpd.GeoDataFrame:
+    """Write a function load_in_data that takes two parameters,
+    the filename for the census dataset and the filename for the
+     food access dataset. load_in_data should merge the two datasets
+     on CTIDFP00 / CensusTract and return the result as a GeoDataFrame.
+      Assume the census identifier column names exist, but don't assume
+       any other columns in the datasets."""
+    # Uses geopandas to read Geospatial data
+    census = gpd.read_file(shp_file_name)
+    # Reads tabular data with use of pandas
+    food_access_data = pd.read_csv(csv_file_name)
+    # Merge the datasets(census and food_access_data)
+    # based on the common identifier column 'CTIDFP00' and census
+    # in left dataframe will be the key for merging
+    merged = census.merge(food_access_data, left_on='CTIDFP00',
+                          right_on='CensusTract', how='left')
+    return merged
+
+
+def percentage_food_data(state_data: gpd.GeoDataFrame) -> float:
+    ''' takes the merged data and returns the percentage of
+     census tracts in Washington for which we have food
+     access data. The percentage should be a float between
+    0 and 100 '''
+    # Tracts  with food access data
+    if len(state_data) == 0:
+        return 0
+    # columns have missing values (NaN)
+    tracts_with_food_data = len(state_data.dropna())
+    percentage = (tracts_with_food_data / len(state_data)) * 100
+    return percentage
+
+
+def plot_map(state_data: gpd.GeoDataFrame) -> None:
+    ''' takes the merged data and plots the
+     shapes of all the census tracts in Washington
+    in a file map.png. '''
+    state_data.plot()
+    plt.title('Washington State')
+    plt.savefig('map.png')
+
+
+def plot_population_map(state_data: gpd.GeoDataFrame) -> None:
+    """ takes the merged data and plots the shapes of all the
+     census tracts in Washington in a file population_map.png
+    where each census tract is colored according to population."""
+    fig, ax = plt.subplots(1)
+    state_data.plot(ax=ax, color='#EEEEEE')
+    # Plot census tracts colored by population
+    state_data.plot(ax=ax, column='POP2010', legend=True)
+    # Set title and legend
+    plt.title('Washington Census Tract Populations')
+    plt.savefig('population_map.png')
+
+
+def plot_population_county_map(state_data: gpd.GeoDataFrame) -> None:
+    ''' Takes the merged data and plots the shapes of all the
+     census tracts in Washington in a file county_population_map.png
+      where each county is colored according to population '''
+    fig, ax = plt.subplots(1)
+    state_data.plot(ax=ax, color='#EEEEEE')
+    # Creates new Geodatframe from only columns necessary
+    county_data = state_data[["POP2010", "geometry", "County"]]
+    # combines polygons that have the same 'County' value into a
+    # single polygon, and it applies the specified aggregation
+    # function of 'sum'. This helps me
+    # dissolve boundaries and aggregate the data within those bounds.
+    # County_data should have aggregated geometries
+    # and attributes for each unique county.
+    county_data = county_data.dissolve(by='County', aggfunc='sum')
+    # Color codes data based on the POP2010 column
+    county_data.plot(column='POP2010', ax=ax, legend=True)
+    ax.set_title('Washington County Populations')
+    plt.savefig('county_population_map.png')
+
+
+def plot_food_access_by_county(state_data: gpd.GeoDataFrame) -> None:
+    ''' takes the merged data and produces 4 plots on the same figure
+     showing information about food access across income level. '''
+    # Creates new GeoDataFrame with only the columns necessary
+    county_data = state_data[['County', 'geometry', 'POP2010', 'lapophalf',
+                             'lapop10', 'lalowihalf', 'lalowi10']]
+    # combines polygons that have the same 'County' value into a
+    # single polygon, and it applies the specified aggregation
+    # function of 'sum'. This helps me
+    # dissolve boundaries and aggregate the data within those bounds.
+    # County_data should have aggregated geometries
+    # and attributes for each unique county.
+    county_data = county_data.dissolve(by='County', aggfunc="sum")
+    # The following code helped me create new columns with the ratios
+    # of people in each caterogry. I used the same denominated of
+    # num of people in this census tract in 2010
+    county_data['lapophalf_ratio'] = (county_data['lapophalf']
+                                      / county_data['POP2010'])
+    county_data['lapop10_ratio'] = (county_data['lapop10']
+                                    / county_data['POP2010'])
+    county_data['lalowihalf_ratio'] = (county_data['lalowihalf']
+                                       / county_data['POP2010'])
+    county_data['lalowi10_ratio'] = (county_data['lalowi10']
+                                     / county_data['POP2010'])
+    # Makes 4 suplots for each of the ratios calculated above with
+    # same background color I used state_Data here because I wanted
+    # both WA data and NAN for preventing holes in the map
+    fig, [[ax1, ax2], [ax3, ax4]] = plt.subplots(2, 2, figsize=(20, 10))
+    state_data.plot(ax=ax1, color='#EEEEEE', vmin=0, vmax=1)
+    state_data.plot(ax=ax2, color='#EEEEEE', vmin=0, vmax=1)
+    state_data.plot(ax=ax3, color='#EEEEEE', vmin=0, vmax=1)
+    state_data.plot(ax=ax4, color='#EEEEEE', vmin=0, vmax=1)
+    # I made the overlaying map county_data to just
+    # include the column I needed.
+    county_data.plot(column='lapophalf_ratio', ax=ax1,
+                     legend=True, vmin=0, vmax=1)
+    ax1.set_title('Low Access: Half')
+    county_data.plot(column='lapop10_ratio', ax=ax3,
+                     legend=True, vmin=0, vmax=1)
+    ax2.set_title('Low Access + Low Income: Half')
+    county_data.plot(column='lalowihalf_ratio', ax=ax2,
+                     legend=True, vmin=0, vmax=1)
+    ax3.set_title('Low Access: 10')
+    county_data.plot(column='lalowi10_ratio', ax=ax4,
+                     legend=True, vmin=0, vmax=1)
+    ax4.set_title('Low Access + Low Income: 10')
+    plt.savefig('county_food_access.png')
+
+
+def plot_low_access_tracts(state_data: gpd.GeoDataFrame) -> None:
+    '''takes the merged data and plots all census tracts
+     considered "low access" in a file low_access.png. '''
+    # Finds urban_data
+    urban_data = state_data[state_data['Urban'] == 1]
+    rural_data = state_data[state_data['Rural'] == 1]
+    # I tried doing the .dropna() above but it threw an error and
+    # I was advised to create new variable below(I recognize its inefficient)
+    urban = urban_data.dropna()
+    rural = rural_data.dropna()
+    # Filters for urban areas with low access, either urban areas with 500 or
+    # more people with low access in these census tracts or where there
+    # is 33% or more people with low acess within a half a mile radius
+    urban_low_access = (urban[(urban['lapophalf'] >= 500) |
+                        ((urban['lapophalf']/urban["POP2010"]) >= 0.33)])
+    # Filters for rural areas with low access, either rurual areas with 500 or
+    # more people with low access in these census tracts or where there is
+    # 33% or more of the population with low access with a ten mile radius
+    rural_low_access = (rural[(rural['lapop10'] >= 500) |
+                        ((rural['lapop10']/rural["POP2010"]) >= 0.33)])
+    fig, ax = plt.subplots(1)
+    # Plots map of WA with background color
+    state_data.plot(ax=ax, color='#EEEEEE')
+    # The follwoing plots census tracts from which wwe have food access data in
+    # the overlaying color of #AAAAAA
+    urban.plot(ax=ax, color='#AAAAAA')
+    rural.plot(ax=ax, color='#AAAAAA')
+    # Plots low acess census tracts in default no need to specify blue :)
+    rural_low_access.plot(ax=ax)
+    urban_low_access.plot(ax=ax)
+    plt.title('Low Access Census Tracts')
+    plt.savefig('low_access.png')
+
+
+def main():
+    state_data = load_in_data(
+        '/course/food_access/tl_2010_53_tract00/tl_2010_53_tract00.shp',
+        '/course/food_access/food_access.csv'
+    )
+    # print(percentage_food_data(state_data))
+    plot_map(state_data)
+    plot_population_map(state_data)
+    plot_population_county_map(state_data)
+    plot_food_access_by_county(state_data)
+    plot_low_access_tracts(state_data)
+
+
+if __name__ == '__main__':
+    main()
